@@ -37,3 +37,8 @@ $l['ougc_custompromotionfield_select_desc'] = '';
 
 $l['ougc_custompromotionfield_table'] = 'Tabla: ';
 $l['ougc_custompromotionfield_field'] = 'Campo: ';
+
+$l['ougc_custompromotionfield_type_notequal_to'] = 'No igual a';
+$l['ougc_custompromotionfield_type_count'] = 'COUNT()';
+$l['ougc_custompromotionfield_type_max'] = 'MAX()';
+$l['ougc_custompromotionfield_type_sum'] = 'SUM()';

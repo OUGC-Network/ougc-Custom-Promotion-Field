@@ -55,8 +55,8 @@ function ougc_custompromotionfield_info()
 		'website'		=> 'https://ougc.network',
 		'author'		=> 'Omar G.',
 		'authorsite'	=> 'https://ougc.network',
-		'version'		=> '1.8.22',
-		'versioncode'	=> 1822,
+		'version'		=> '1.8.23',
+		'versioncode'	=> 1823,
 		'compatibility'	=> '18*',
 		'codename'		=> 'ougc_custompromotionfield',
 		'pl'			=> array(
@@ -69,9 +69,24 @@ function ougc_custompromotionfield_info()
 // _activate function
 function ougc_custompromotionfield_activate()
 {
-	global $lang, $PL, $cache;
+	global $lang, $PL, $cache, $db;
 
 	OUGC_CustomPromotionField::meets_requirements();
+
+	foreach(OUGC_CustomPromotionField::_db_columns() as $table => $columns)
+	{
+		foreach($columns as $field => $definition)
+		{
+			if(!$db->field_exists($field, $table))
+			{
+				$db->add_column($table, $field, $definition);
+			}
+			else
+			{
+				$db->modify_column($table, $field, $definition);
+			}
+		}
+	}
 
 	// Insert version code into cache
 	$plugins = $cache->read('ougc_plugins');
@@ -171,7 +186,7 @@ class OUGC_CustomPromotionField
 			'promotions'	=> array(
 				'ougc_custompromotionfield_table'	=> "varchar(50) NOT NULL DEFAULT ''",
 				'ougc_custompromotionfield_field'	=> "varchar(50) NOT NULL DEFAULT ''",
-				'ougc_custompromotionfield_value'	=> "smallint(5) NOT NULL DEFAULT '0'",
+				'ougc_custompromotionfield_value'	=> "varchar(50) NOT NULL DEFAULT '0'",
 				'ougc_custompromotionfield_type'	=> "varchar(5) NOT NULL DEFAULT ''",
 			),
 		);
@@ -266,13 +281,17 @@ class OUGC_CustomPromotionField
 				">" => $lang->greater_than,
 				">=" => $lang->greater_than_or_equal_to,
 				"=" => $lang->equal_to,
+				"!=" => $lang->ougc_custompromotionfield_type_notequal_to,
 				"<=" => $lang->less_than_or_equal_to,
 				"<" => $lang->less_than,
 				"hours" => $lang->hours,
 				"days" => $lang->days,
 				"weeks" => $lang->weeks,
 				"months" => $lang->months,
-				"years" => $lang->years
+				"years" => $lang->years,
+				//"count" => $lang->ougc_custompromotionfield_type_count,
+				//"max" => $lang->ougc_custompromotionfield_type_max,
+				//sum" => $lang->ougc_custompromotionfield_type_sum,
 			);
 
 			$form_container->output_row(
@@ -280,7 +299,7 @@ class OUGC_CustomPromotionField
 				$lang->ougc_custompromotionfield_select_desc,
 				$lang->ougc_custompromotionfield_table.$form->generate_text_box('ougc_custompromotionfield_table', $mybb->get_input('ougc_custompromotionfield_table'), array('id' => 'ougc_custompromotionfield_table', 'style' => 'max-width: 10em;')).' '.
 				$lang->ougc_custompromotionfield_field.$form->generate_text_box('ougc_custompromotionfield_field', $mybb->get_input('ougc_custompromotionfield_field'), array('id' => 'ougc_custompromotionfield_field', 'style' => 'max-width: 10em;')).'<hr />'.
-				$form->generate_numeric_field('ougc_custompromotionfield_value', $mybb->get_input('ougc_custompromotionfield_value', MyBB::INPUT_INT), array('id' => 'ougc_custompromotionfield_value', 'min' => 0))." ".
+				$form->generate_numeric_field('ougc_custompromotionfield_value', $mybb->get_input('ougc_custompromotionfield_value', MyBB::INPUT_STRING), array('id' => 'ougc_custompromotionfield_value', 'min' => 0))." ".
 				$form->generate_select_box('ougc_custompromotionfield_type', $options, $mybb->get_input('ougc_custompromotionfield_type'), array('id' => 'ougc_custompromotionfield_type')), 'ougc_custompromotionfield_type');
 		}
 	}
@@ -325,10 +344,8 @@ class OUGC_CustomPromotionField
 		{
 			$table = (string)$args['promotion']['ougc_custompromotionfield_table'];
 			$field = (string)$args['promotion']['ougc_custompromotionfield_field'];
-			$value = (int)$args['promotion']['ougc_custompromotionfield_value'];
 
 			if(
-				$value < 1 ||
 				$requirement != 'custompromotionfield' ||
 				!$db->table_exists($table) ||
 				!$db->field_exists($field, $table)
@@ -337,14 +354,55 @@ class OUGC_CustomPromotionField
 				continue;
 			}
 
+			$operator = $args['promotion']['ougc_custompromotionfield_type'];
+
+			$value = (string)$args['promotion']['ougc_custompromotionfield_value'];
+
+			if(!in_array($operator, array('=', '!=')) || is_numeric($value))
+			{
+				$value = (int)$args['promotion']['ougc_custompromotionfield_value'];
+			}
+			else
+			{
+				$value = $db->escape_string($value);
+			}
+
 			$prefix = '';
-			if($table != 'users' || 1)
+			if($table != 'users')
 			{
 				$prefix = 'cf.';
+			}
 
+			$cfield = false;
+			switch($operator)
+			{
+				case "count":
+					$cfield = 'cf_'.$field;
+					$args['usergroup_select'] .= ", COUNT({$prefix}{$field}) AS {$cfield}";
+					break;
+				case "max":
+					$cfield = 'cf_'.$field;
+					$args['usergroup_select'] .= ", MAX({$prefix}{$field}) AS {$cfield}";
+					break;
+				case "sum":
+					$cfield = 'cf_'.$field;
+					$args['usergroup_select'] .= ",SUM({$prefix}{$field}) AS {$cfield}";
+					break;
+			}
+
+			if($table != 'users')
+			{
 				foreach(array('postnum', 'threadnum', 'reputation', 'referrals', 'warningpoints', 'regdate', 'timeonline', 'usergroup', 'additionalgroups') as $uf)
 				{
 					$args['sql_where'] = str_replace($uf, 'u.'.$uf, $args['sql_where']);
+				}
+
+				$uf = 'uid';
+				switch($table)
+				{
+					case 'userfields':
+						$uf = 'ufid';
+						break;
 				}
 
 				control_object($db, '
@@ -355,7 +413,7 @@ class OUGC_CustomPromotionField
 						if(!$done && my_strpos($fields, "uid,'.$args['usergroup_select'].'") !== false)
 						{
 							$fields = "u.uid,u.'.$args['usergroup_select'].'";
-							$table = $table." u LEFT JOIN '.TABLE_PREFIX.$table.' cf ON (u.uid=cf.uid)";
+							$table = $table." u LEFT JOIN '.TABLE_PREFIX.$table.' cf ON (u.uid=cf.'.$uf.')";
 
 							$done = true;
 						}
@@ -365,14 +423,16 @@ class OUGC_CustomPromotionField
 				');
 			}
 
-			$operator = $args['promotion']['ougc_custompromotionfield_type'];
-
-			if(!in_array($args['promotion']['ougc_custompromotionfield_type'], array('>', '>=', '=', '<=', '<')))
+			if($cfield !== false)
+			{
+				$operator = '>=';
+			}
+			elseif(!in_array($operator, array('>', '>=', '=', '!=', '<=', '<')))
 			{
 				$operator = '<=';
 			}
 
-			switch($args['promotion']['ougc_custompromotionfield_type'])
+			switch($operator)
 			{
 				case "hours":
 					$value = TIME_NOW-($value*60*60);
@@ -391,7 +451,7 @@ class OUGC_CustomPromotionField
 					break;
 			}
 
-			$args['sql_where'] .= "{$args['and']}{$prefix}{$field} {$operator} '{$value}'";
+			$args['sql_where'] .= "{$args['and']}".($cfield ? $cfield : $prefix.$field)." {$operator} '{$value}'";
 		}
 	}
 }
