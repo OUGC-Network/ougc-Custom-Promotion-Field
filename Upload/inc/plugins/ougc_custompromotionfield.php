@@ -537,7 +537,7 @@ class OUGC_CustomPromotionField
                         $columnName,
                         $tableName
                     )) ||
-                empty($columnValues) ||
+                //empty($columnValues) ||
                 !in_array($columnOperator, $comparisonOperators) ||
                 (!empty($aggregateFunction) && !in_array($aggregateFunction, self::$aggregateFunctions)) ||
                 (!empty($aggregateFunction) && empty($aggregateAlias))
