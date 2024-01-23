@@ -31,13 +31,49 @@ $l['ougc_custompromotionfield_desc'] = 'Allow administrators to select custom ta
 
 $l['ougc_custompromotionfield_pl'] = 'This plugin requires <a href="{1}">PluginLibrary</a> version {2} or later. Please uplaod the necessary files.';
 
-$l['ougc_custompromotionfield_select'] = 'Custom Field';
-$l['ougc_custompromotionfield_select_desc'] = '';
+$l['ougc_custompromotionfield_select'] = 'Custom Field(s)';
+$l['ougc_custompromotionfield_select_table'] = 'Custom Field: Table';
+$l['ougc_custompromotionfield_select_table_desc'] = 'Select a custom table to consider for this promotion. This table has to exist within the forum table.';
+$l['ougc_custompromotionfield_select_column'] = 'Custom Field: Column';
+$l['ougc_custompromotionfield_select_column_desc'] = 'Select a custom column to consider for this promotion. This column has to exist within the selected table above.';
+$l['ougc_custompromotionfield_select_value'] = 'Custom Field: Value';
+$l['ougc_custompromotionfield_select_value_desc'] = 'Select the value to compare against for the selected column above.';
+$l['ougc_custompromotionfield_select_script'] = 'Custom Field: JSON Script';
+$l['ougc_custompromotionfield_select_script_desc'] = 'JSON compatible script to set complex promotion verifications. <a href="https://github.com/OUGC-Network/OUGC-Custom-Promotion-Field" target="_blank">Read the documentation</a> for more on this.';
+$l['ougc_custompromotionfield_error_script'] = 'The value for "Custom Field: JSON Script" is not a valid JSON format string. Leave empty to ignore this setting.';
 
 $l['ougc_custompromotionfield_table'] = 'Table: ';
 $l['ougc_custompromotionfield_field'] = 'Field: ';
 
 $l['ougc_custompromotionfield_type_notequal_to'] = 'Not equal to';
-$l['ougc_custompromotionfield_type_count'] = 'COUNT()';
-$l['ougc_custompromotionfield_type_max'] = 'MAX()';
-$l['ougc_custompromotionfield_type_sum'] = 'SUM()';
+
+$l['ougc_custompromotionfield_placeholder_script'] = '{
+	"whereClauses":[
+		{
+			"tableName":"threads",
+			"columnName":"tid",
+			"columnValue":3,
+			"columnOperator":">=",
+			"aggregateFunction":"COUNT",
+			"aggregateAlias":"totalThreads"
+		},
+		{
+			"tableName":"threads",
+			"columnName":"visible",
+			"columnValue":1,
+			"columnOperator":"="
+		},
+		{
+			"tableName":"forums",
+			"columnName":"fid",
+			"columnValue":[
+				2,
+				30
+			],
+			"columnOperator":"IN",
+			"relationMainField":"ougcCustomPromotionFieldTable_threads.fid",
+			"relationSecondaryField":"fid"
+		}
+	],
+	"logicalOperator":"AND"
+}';

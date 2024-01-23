@@ -29,34 +29,42 @@
 // Die if IN_MYBB is not defined, for security reasons.
 defined('IN_MYBB') or die('This file cannot be accessed directly.');
 
+global $plugins;
+
 // Add our hooks
 if (defined('IN_ADMINCP')) {
     $plugins->add_hook(
         'admin_formcontainer_output_row',
-        array('OUGC_CustomPromotionField', 'admin_formcontainer_output_row')
+        ['OUGC_CustomPromotionField', 'admin_formcontainer_output_row']
+    );
+    $plugins->add_hook(
+        'admin_user_group_promotions_add',
+        ['OUGC_CustomPromotionField', 'admin_user_group_promotions_add']
+    );
+    $plugins->add_hook(
+        'admin_user_group_promotions_edit',
+        ['OUGC_CustomPromotionField', 'admin_user_group_promotions_add']
     );
     $plugins->add_hook(
         'admin_user_group_promotions_add_commit',
-        array('OUGC_CustomPromotionField', 'admin_user_group_promotions_add_commit')
+        ['OUGC_CustomPromotionField', 'admin_user_group_promotions_add_commit']
     );
     $plugins->add_hook(
         'admin_user_group_promotions_edit_commit',
-        array('OUGC_CustomPromotionField', 'admin_user_group_promotions_edit_commit')
+        ['OUGC_CustomPromotionField', 'admin_user_group_promotions_add_commit']
     );
 }
 
-$plugins->add_hook('task_promotions', array('OUGC_CustomPromotionField', 'task_promotions'));
+$plugins->add_hook('task_promotions', ['OUGC_CustomPromotionField', 'task_promotions']);
 
-// PLUGINLIBRARY
-defined('PLUGINLIBRARY') or define('PLUGINLIBRARY', MYBB_ROOT . 'inc/plugins/pluginlibrary.php');
+defined('PLUGINLIBRARY') || define('PLUGINLIBRARY', MYBB_ROOT . 'inc/plugins/pluginlibrary.php');
 
-// Plugin API
 function ougc_custompromotionfield_info()
 {
     global $lang;
     OUGC_CustomPromotionField::lang_load();
 
-    return array(
+    return [
         'name' => 'OUGC Custom Promotion Field',
         'description' => $lang->ougc_custompromotionfield_desc,
         'website' => 'https://ougc.network',
@@ -66,14 +74,13 @@ function ougc_custompromotionfield_info()
         'versioncode' => 1823,
         'compatibility' => '18*',
         'codename' => 'ougc_custompromotionfield',
-        'pl' => array(
+        'pl' => [
             'version' => 13,
             'url' => 'https://community.mybb.com/mods.php?action=view&pid=573'
-        )
-    );
+        ]
+    ];
 }
 
-// _activate function
 function ougc_custompromotionfield_activate()
 {
     global $lang, $PL, $cache, $db;
@@ -90,11 +97,10 @@ function ougc_custompromotionfield_activate()
         }
     }
 
-    // Insert version code into cache
     $plugins = $cache->read('ougc_plugins');
 
     if (!$plugins) {
-        $plugins = array();
+        $plugins = [];
     }
 
     $info = ougc_custompromotionfield_info();
@@ -108,7 +114,6 @@ function ougc_custompromotionfield_activate()
     $cache->update('ougc_plugins', $plugins);
 }
 
-// _is_installed function
 function ougc_custompromotionfield_is_installed()
 {
     global $db;
@@ -128,7 +133,6 @@ function ougc_custompromotionfield_is_installed()
     return $installed;
 }
 
-// _uninstall function
 function ougc_custompromotionfield_uninstall()
 {
     global $db, $PL;
@@ -145,7 +149,6 @@ function ougc_custompromotionfield_uninstall()
 
     global $cache;
 
-    // Remove version code from cache
     $plugins = (array)$cache->read('ougc_plugins');
 
     if (isset($plugins['custompromotionfield'])) {
@@ -159,32 +162,66 @@ function ougc_custompromotionfield_uninstall()
     }
 }
 
-// Our awesome class
 class OUGC_CustomPromotionField
 {
-    public $options = array();
+    // TODO: as listed @ https://mariadb.com/kb/en/string-functions/
+    private static $stringFunctions = [
+        'LIKE',
+        'NOT LIKE',
+        'LOWER',
+        'UPPER',
+    ];
 
-    public function __construct()
-    {
-    }
+    // TODO: as listed @ https://mariadb.com/kb/en/comparison-operators/
+    private static $comparisonOperators = [
+        '>',
+        '>=',
+        '=',
+        '!=',
+        '<=',
+        '<',
+        '<=>',
+        'IN',
+        'NOT IN',
+    ];
 
-    // List of columns
-    public function _db_columns()
+    private static $comparisonOperatorsCore = [
+        'hours',
+        'days',
+        'weeks',
+        'months',
+        'years',
+    ];
+
+    // TODO: as listed @ https://mariadb.com/kb/en/aggregate-functions/
+    private static $aggregateFunctions = [
+        'COUNT',
+        'MAX',
+        'MIN',
+        'SUM',
+    ];
+
+    // TODO: as listed @ https://mariadb.com/kb/en/logical-operators/
+    private static $logicalOperators = [
+        'AND',
+        'OR',
+        'XOR',
+    ];
+
+    public static function _db_columns()
     {
-        $tables = array(
-            'promotions' => array(
+        return [
+            'promotions' => [
                 'ougc_custompromotionfield_table' => "varchar(50) NOT NULL DEFAULT ''",
                 'ougc_custompromotionfield_field' => "varchar(50) NOT NULL DEFAULT ''",
                 'ougc_custompromotionfield_value' => "varchar(50) NOT NULL DEFAULT '0'",
-                'ougc_custompromotionfield_type' => "varchar(5) NOT NULL DEFAULT ''",
-            ),
-        );
-
-        return $tables;
+                'ougc_custompromotionfield_type' => "varchar(10) NOT NULL DEFAULT ''",
+                'ougc_custompromotionfield_script' => 'text NULL',
+            ],
+        ];
     }
 
-    // Verify DB columns
-    public function _db_verify_columns()
+    public static function _db_verify_columns()
     {
         global $db;
 
@@ -199,16 +236,14 @@ class OUGC_CustomPromotionField
         }
     }
 
-    // Load our language file if neccessary
-    public function lang_load()
+    public static function lang_load()
     {
         global $lang;
 
         isset($lang->ougc_custompromotionfield) || $lang->load('users_ougc_custompromotionfield');
     }
 
-    // Check PL requirements
-    public function meets_requirements()
+    public static function meets_requirements()
     {
         global $PL, $lang;
 
@@ -233,13 +268,15 @@ class OUGC_CustomPromotionField
         return true;
     }
 
-    public function admin_formcontainer_output_row(&$args)
+    public static function admin_formcontainer_output_row(&$args)
     {
         global $lang, $form_container, $form, $mybb, $promotion;
 
         self::lang_load();
 
-        if ($args['description'] == $lang->promo_requirements_desc && !empty($lang->promo_requirements_desc)) {
+        if (!empty($lang->promo_requirements_desc) && $args['description'] == $lang->promo_requirements_desc) {
+            $selected = '';
+
             foreach ($mybb->get_input('requirements', MyBB::INPUT_ARRAY) as $requirement) {
                 if ($requirement == 'custompromotionfield') {
                     $selected = ' selected="selected"';
@@ -253,64 +290,118 @@ class OUGC_CustomPromotionField
             );
         }
 
-        if ($args['description'] == $lang->orig_user_group_desc && !empty($lang->orig_user_group_desc)) {
+        if (!empty($lang->orig_user_group_desc) && $args['description'] == $lang->orig_user_group_desc) {
             foreach (self::_db_columns() as $table => $columns) {
                 foreach ($columns as $field => $definition) {
-                    isset($mybb->input[$field]) || $mybb->input[$field] = $promotion[$field];
+                    if (!isset($mybb->input[$field]) && isset($promotion[$field])) {
+                        $mybb->input[$field] = $promotion[$field];
+                    }
                 }
             }
 
-            $options = array(
-                '>' => $lang->greater_than,
-                '>=' => $lang->greater_than_or_equal_to,
-                '=' => $lang->equal_to,
-                '!=' => $lang->ougc_custompromotionfield_type_notequal_to,
-                '<=' => $lang->less_than_or_equal_to,
-                '<' => $lang->less_than,
+            $options = [
+                '>' => '(>) ' . $lang->greater_than,
+                '>=' => '(>=) ' . $lang->greater_than_or_equal_to,
+                '=' => '(=) ' . $lang->equal_to,
+                '!=' => '(!=) ' . $lang->ougc_custompromotionfield_type_notequal_to,
+                '<=' => '(<=) ' . $lang->less_than_or_equal_to,
+                '<' => '(<) ' . $lang->less_than,
                 'hours' => $lang->hours,
                 'days' => $lang->days,
                 'weeks' => $lang->weeks,
                 'months' => $lang->months,
                 'years' => $lang->years,
-                //"count" => $lang->ougc_custompromotionfield_type_count,
-                //"max" => $lang->ougc_custompromotionfield_type_max,
-                //sum" => $lang->ougc_custompromotionfield_type_sum,
+            ];
+
+            $form_container->output_row(
+                $lang->ougc_custompromotionfield_select_table,
+                $lang->ougc_custompromotionfield_select_table_desc,
+                $form->generate_text_box(
+                    'ougc_custompromotionfield_table',
+                    $mybb->get_input('ougc_custompromotionfield_table'),
+                    ['style' => '" placeholder="users']
+                ),
+                'ougc_custompromotionfield_table'
             );
 
             $form_container->output_row(
-                $lang->ougc_custompromotionfield_select,
-                $lang->ougc_custompromotionfield_select_desc,
-                $lang->ougc_custompromotionfield_table . $form->generate_text_box(
-                    'ougc_custompromotionfield_table',
-                    $mybb->get_input('ougc_custompromotionfield_table'),
-                    array('id' => 'ougc_custompromotionfield_table', 'style' => 'max-width: 10em;')
-                ) . ' ' .
-                $lang->ougc_custompromotionfield_field . $form->generate_text_box(
+                $lang->ougc_custompromotionfield_select_column,
+                $lang->ougc_custompromotionfield_select_column_desc,
+                $form->generate_text_box(
                     'ougc_custompromotionfield_field',
                     $mybb->get_input('ougc_custompromotionfield_field'),
-                    array('id' => 'ougc_custompromotionfield_field', 'style' => 'max-width: 10em;')
-                ) . '<hr />' .
+                    ['style' => '" placeholder="lastpost']
+                ),
+                'ougc_custompromotionfield_column'
+            );
+
+            $form_container->output_row(
+                $lang->ougc_custompromotionfield_select_value,
+                $lang->ougc_custompromotionfield_select_value_desc,
                 $form->generate_numeric_field(
                     'ougc_custompromotionfield_value',
                     $mybb->get_input('ougc_custompromotionfield_value', MyBB::INPUT_STRING),
-                    array('id' => 'ougc_custompromotionfield_value', 'min' => 0)
+                    ['min' => 0]
                 ) . ' ' .
                 $form->generate_select_box(
                     'ougc_custompromotionfield_type',
                     $options,
-                    $mybb->get_input('ougc_custompromotionfield_type'),
-                    array('id' => 'ougc_custompromotionfield_type')
+                    $mybb->get_input('ougc_custompromotionfield_type')
                 ),
-                'ougc_custompromotionfield_type'
+                'ougc_custompromotionfield_value'
+            );
+
+            $form_container->output_row(
+                $lang->ougc_custompromotionfield_select_script,
+                $lang->ougc_custompromotionfield_select_script_desc,
+                $form->generate_text_area(
+                    'ougc_custompromotionfield_script',
+                    $mybb->get_input('ougc_custompromotionfield_script'),
+                    [
+                        'style' => '" placeholder="' . str_replace(
+                                '"',
+                                '&quot;',
+                                $lang->ougc_custompromotionfield_placeholder_script
+                            )
+                    ]
+                ),
+                'ougc_custompromotionfield_script'
             );
         }
     }
 
-    public function admin_user_group_promotions_add_commit()
+    static function admin_user_group_promotions_add()
     {
-        global $db, $pid, $mybb;
+        global $db, $pid, $mybb, $plugins;
 
-        $fields = array();
+        $editAction = $plugins->current_hook === 'admin_user_group_promotions_edit';
+
+        if (!$mybb->get_input('ougc_custompromotionfield_script')) {
+            return false;
+        }
+
+        if (json_decode($mybb->get_input('ougc_custompromotionfield_script')) === null) {
+            global $lang, $errors;
+
+            self::lang_load();
+
+            $errors[] = $lang->ougc_custompromotionfield_error_script;
+        }
+    }
+
+    public static function admin_user_group_promotions_add_commit()
+    {
+        global $db, $pid, $mybb, $plugins;
+
+        $editAction = $plugins->current_hook === 'admin_user_group_promotions_edit_commit';
+
+        if ($editAction) {
+            global $update_promotion;
+
+            $fields = &$update_promotion;
+        } else {
+            $fields = [];
+        }
 
         foreach (self::_db_columns() as $table => $columns) {
             foreach ($columns as $field => $definition) {
@@ -318,144 +409,271 @@ class OUGC_CustomPromotionField
             }
         }
 
-        $db->update_query('promotions', $fields, "pid='{$pid}'");
-    }
-
-    public function admin_user_group_promotions_edit_commit()
-    {
-        global $db, $update_promotion, $mybb;
-
-        foreach (self::_db_columns() as $table => $columns) {
-            foreach ($columns as $field => $definition) {
-                $update_promotion[$field] = $db->escape_string($mybb->get_input($field));
-            }
+        if (!$editAction) {
+            $db->update_query('promotions', $fields, "pid='{$pid}'");
         }
     }
 
-    public function task_promotions(&$args)
+    public static function task_promotions(&$promotionArguments)
     {
         global $promotion, $db;
 
-        $requirements = explode(',', $args['promotion']['requirements']);
+        if (my_strpos($promotionArguments['promotion']['requirements'], 'custompromotionfield') === false) {
+            return false;
+        }
 
-        foreach ($requirements as $requirement) {
-            $table = (string)$args['promotion']['ougc_custompromotionfield_table'];
-            $field = (string)$args['promotion']['ougc_custompromotionfield_field'];
+        foreach (
+            [
+                'postnum',
+                'threadnum',
+                'reputation',
+                'referrals',
+                'warningpoints',
+                'regdate',
+                'timeonline',
+                'usergroup',
+                'additionalgroups'
+            ] as $usersDefaultColumn
+        ) {
+            $promotionArguments['sql_where'] = str_replace(
+                $usersDefaultColumn,
+                "u.{$usersDefaultColumn}",
+                $promotionArguments['sql_where']
+            );
+        }
 
-            if (
-                $requirement != 'custompromotionfield' ||
-                !$db->table_exists($table) ||
-                !$db->field_exists($field, $table)
-            ) {
-                continue;
-            }
+        $promotionScripts = json_decode($promotionArguments['promotion']['ougc_custompromotionfield_script'], true);
 
-            $operator = $args['promotion']['ougc_custompromotionfield_type'];
+        if (!is_array($promotionScripts)) {
+            $promotionScripts = [];
+        }
 
-            $value = (string)$args['promotion']['ougc_custompromotionfield_value'];
+        $conditionalTable = $promotionArguments['promotion']['ougc_custompromotionfield_table'];
 
-            if (!in_array($operator, array('=', '!=')) || is_numeric($value)) {
-                $value = (int)$args['promotion']['ougc_custompromotionfield_value'];
-            } else {
-                $value = $db->escape_string($value);
-            }
+        $conditionalColumn = $promotionArguments['promotion']['ougc_custompromotionfield_field'];
 
-            $prefix = '';
-            if ($table != 'users') {
-                $prefix = 'cf.';
-            }
+        $conditionalValue = $promotionArguments['promotion']['ougc_custompromotionfield_value'];
 
-            $cfield = false;
-            switch ($operator) {
-                case 'count':
-                    $cfield = 'cf_' . $field;
-                    $args['usergroup_select'] .= ", COUNT({$prefix}{$field}) AS {$cfield}";
-                    break;
-                case 'max':
-                    $cfield = 'cf_' . $field;
-                    $args['usergroup_select'] .= ", MAX({$prefix}{$field}) AS {$cfield}";
-                    break;
-                case 'sum':
-                    $cfield = 'cf_' . $field;
-                    $args['usergroup_select'] .= ",SUM({$prefix}{$field}) AS {$cfield}";
-                    break;
-            }
+        $conditionalOperator = $promotionArguments['promotion']['ougc_custompromotionfield_type'];
 
-            if ($table != 'users') {
-                foreach (
-                    array(
-                        'postnum',
-                        'threadnum',
-                        'reputation',
-                        'referrals',
-                        'warningpoints',
-                        'regdate',
-                        'timeonline',
-                        'usergroup',
-                        'additionalgroups'
-                    ) as $uf
-                ) {
-                    $args['sql_where'] = str_replace($uf, 'u.' . $uf, $args['sql_where']);
-                }
-
-                $uf = 'uid';
-                switch ($table) {
-                    case 'userfields':
-                        $uf = 'ufid';
-                        break;
-                }
-
-                control_object(
-                    $db,
-                    '
-					function simple_select($table, $fields="*", $conditions="", $options=array())
-					{
-						static $done = false;
-
-						if(!$done && my_strpos($fields, "uid,' . $args['usergroup_select'] . '") !== false)
-						{
-							$fields = "u.uid,u.' . $args['usergroup_select'] . '";
-							$table = $table." u LEFT JOIN ' . TABLE_PREFIX . $table . ' cf ON (u.uid=cf.' . $uf . ')";
-
-							$done = true;
-						}
-
-						return parent::simple_select($table, $fields, $conditions, $options);
-					}
-				'
-                );
-            }
-
-            if ($cfield !== false) {
-                $operator = '>=';
-            } elseif (!in_array($operator, array('>', '>=', '=', '!=', '<=', '<'))) {
-                $operator = '<=';
-            }
-
-            switch ($operator) {
+        if (
+            (!empty($conditionalTable) && $db->table_exists($conditionalTable)) &&
+            (!empty($conditionalColumn) && $db->field_exists(
+                    $conditionalColumn,
+                    $conditionalTable
+                ))
+        ) {
+            switch ($conditionalOperator) {
                 case 'hours':
-                    $value = TIME_NOW - ($value * 60 * 60);
+                    $conditionalOperator = '>=';
+
+                    $conditionalValue = TIME_NOW - ($conditionalValue * 60 * 60);
                     break;
                 case 'days':
-                    $value = TIME_NOW - ($value * 60 * 60 * 24);
+                    $conditionalOperator = '>=';
+
+                    $conditionalValue = TIME_NOW - ($conditionalValue * 60 * 60 * 24);
                     break;
                 case 'weeks':
-                    $value = TIME_NOW - ($value * 60 * 60 * 24 * 7);
+                    $conditionalOperator = '>=';
+
+                    $conditionalValue = TIME_NOW - ($conditionalValue * 60 * 60 * 24 * 7);
                     break;
                 case 'months':
-                    $value = TIME_NOW - ($value * 60 * 60 * 24 * 30);
-                    break;
-                case 'years':
-                    $value = TIME_NOW - ($value * 60 * 60 * 24 * 365);
-                    break;
+                    $conditionalOperator = '>=';
+
+                    $conditionalValue = TIME_NOW - ($conditionalValue * 60 * 60 * 24 * 30);
             }
 
-            $args['sql_where'] .= "{$args['and']}" . ($cfield ? $cfield : $prefix . $field) . " {$operator} '{$value}'";
+            $promotionScripts['whereClauses'][] = [
+                'tableName' => $conditionalTable,
+                'columnName' => $conditionalColumn,
+                'columnValue' => $conditionalValue,
+                'columnOperator' => $conditionalOperator
+            ];
         }
+
+        $additionalTables = $additionalClauses = $additionalFields = $aggregateHavings = [];
+
+        $anonymousFunction = function (&$whereClause) use (
+            $db,
+            &$additionalTables,
+            &$additionalClauses,
+            &$additionalFields,
+            &$aggregateHavings
+        ): bool {
+            $tableName = &$whereClause['tableName'];
+
+            $columnName = &$whereClause['columnName'];
+
+            $columnValues = &$whereClause['columnValue'];
+
+            $columnOperator = $whereClause['columnOperator'];
+
+            $columnOperator = $whereClause['columnOperator'];
+
+            $aggregateFunction = isset($whereClause['aggregateFunction']) ? $whereClause['aggregateFunction'] : null;
+
+            $aggregateAlias = '';
+
+            if (isset($whereClause['aggregateAlias']) && ctype_alnum($whereClause['aggregateAlias'])) {
+                $aggregateAlias = $whereClause['aggregateAlias'];
+            }
+
+            if (!is_array($columnValues)) {
+                $columnValues = [$columnValues];
+            }
+
+            static $comparisonOperators = null;
+
+            if ($comparisonOperators === null) {
+                $comparisonOperators = array_merge(self::$comparisonOperators, self::$stringFunctions);
+            }
+
+            if (
+                !ctype_alnum($tableName) ||
+                !$db->table_exists($tableName) ||
+                (empty($aggregateFunction) && ctype_alnum($columnName) && !$db->field_exists(
+                        $columnName,
+                        $tableName
+                    )) ||
+                empty($columnValues) ||
+                !in_array($columnOperator, $comparisonOperators) ||
+                (!empty($aggregateFunction) && !in_array($aggregateFunction, self::$aggregateFunctions)) ||
+                (!empty($aggregateFunction) && empty($aggregateAlias))
+            ) {
+                return false;
+            }
+
+            $aggregateAlias = "ougcCustomPromotionFieldColumn_{$aggregateAlias}";
+
+            foreach ($columnValues as &$columnValue) {
+                if (is_float($columnValue)) {
+                    $columnValue = (float)$columnValue;
+                } elseif (is_numeric($columnValue)) {
+                    $columnValue = (int)$columnValue;
+                } else {
+                    $columnValue = $db->escape_string($columnValue);
+                }
+            }
+
+            unset($columnValue);
+
+            if (in_array($columnOperator, ['IN', 'NOT IN', 'LOWER', 'UPPER'])) {
+                $conditionalValue = implode("','", $columnValues);
+
+                $conditionalValue = "('{$conditionalValue}')";
+            } elseif (in_array($columnOperator, ['LIKE', 'NOT LIKE'])) {
+                $conditionalValue = implode('', $columnValues);
+
+                $conditionalValue = "\"%{$conditionalValue}%\"";
+            } else {
+                $conditionalValue = implode("','", $columnValues);
+
+                $conditionalValue = "'{$conditionalValue}'";
+            }
+
+            $conditionalTablePrefix = "ougcCustomPromotionFieldTable_{$tableName}";
+
+            if (isset($whereClause['relationMainField']) && preg_match('/[\w.]+/', $whereClause['relationMainField'])) {
+                $relationMainField = $whereClause['relationMainField'];
+            } else {
+                $relationMainField = 'u.uid';
+            }
+
+            if (isset($whereClause['relationMainField']) && preg_match('/[\w.]+/', $whereClause['relationMainField'])) {
+                $relationSecondaryField = $whereClause['relationSecondaryField'];
+            } else {
+                $relationSecondaryField = 'uid';
+            }
+
+            $additionalTables["{$tableName} AS {$conditionalTablePrefix} ON ({$conditionalTablePrefix}.{$relationSecondaryField}={$relationMainField})"] = 1;
+
+            if (!empty($aggregateFunction) && in_array($aggregateFunction, self::$aggregateFunctions)) {
+                $hasAggregateFunction = true;
+
+                $additionalFields["{$aggregateFunction}({$conditionalTablePrefix}.{$columnName}) AS {$aggregateAlias}"] = 1;
+            }
+
+            if (empty($aggregateFunction)) {
+                $dataColum = "{$conditionalTablePrefix}.{$columnName}";
+            } else {
+                $dataColum = $aggregateAlias;
+            }
+
+
+            if (empty($hasAggregateFunction)) {
+                $additionalClauses["{$dataColum} {$columnOperator} {$conditionalValue}"] = 1;
+            } else {
+                $aggregateHavings["{$dataColum} {$columnOperator} {$conditionalValue}"] = 1;
+            }
+
+            return '';
+        };
+
+        foreach ($promotionScripts['whereClauses'] as $whereClause) {
+            $anonymousFunction($whereClause);
+        }
+
+        if (in_array($promotionScripts['logicalOperator'], self::$logicalOperators)) {
+            $logicalOperator = $promotionScripts['logicalOperator'];
+        } else {
+            $logicalOperator = 'AND';
+        }
+
+        $additionalTables = implode(" LEFT JOIN {$db->table_prefix}", array_keys($additionalTables));
+
+        $additionalTables = $additionalTables ? " LEFT JOIN {$db->table_prefix}{$additionalTables}" : '';
+
+        $additionalClauses = implode(" {$logicalOperator} ", array_keys($additionalClauses));
+
+        $promotionArguments['sql_where'] .= " {$promotionArguments['and']} ({$additionalClauses})";
+
+        $additionalFields = implode(', ', array_keys($additionalFields));
+
+        $additionalFields = $additionalFields ? ", {$additionalFields}" : '';
+
+        if (empty($aggregateHavings)) {
+            $aggregateHavings = '';
+        } else {
+            $aggregateHavings = implode(',', array_keys($aggregateHavings));
+
+            $aggregateHavings = "HAVING {$aggregateHavings}";
+        }
+
+        control_db(
+            'function simple_select($table, $fields = "*", $conditions = "", $options = array())
+{
+    global $db;
+    
+    static $controlDone = false;
+    
+    if(
+        !$controlDone &&
+        my_strpos($table, "users") !== false &&
+        my_strpos($fields, "uid,' . $promotionArguments['usergroup_select'] . '") !== false
+    )
+    {
+        $GLOBALS["someDoneVariable"] = true;
+        
+        $controlDone = false;
+    
+        $table = "users AS u ' . $additionalTables . '";
+    
+        $fields = "u.uid,u.' . $promotionArguments['usergroup_select'] . $additionalFields . '";
+        
+        $options["group_by"] = "u.uid ' . $aggregateHavings . '";
+    }
+    
+    return parent::simple_select($table, $fields, $conditions, $options);
+}'
+        );
+
+        return true;
     }
 }
 
-// control_object by Zinga Burga from MyBBHacks ( mybbhacks.zingaburga.com ), 1.62
+// control_object by Zinga Burga from MyBBHacks ( mybbhacks.zingaburga.com )
 if (!function_exists('control_object')) {
     function control_object(&$obj, $code)
     {
@@ -489,5 +707,44 @@ if (!function_exists('control_object')) {
             }
         }
         // else not a valid object or PHP serialize has changed
+    }
+}
+
+if (!function_exists('control_db')) {
+    // explicit workaround for PDO, as trying to serialize it causes a fatal error (even though PHP doesn't complain over serializing other resources)
+    if ($GLOBALS['db'] instanceof AbstractPdoDbDriver) {
+        $GLOBALS['AbstractPdoDbDriver_lastResult_prop'] = new ReflectionProperty('AbstractPdoDbDriver', 'lastResult');
+        $GLOBALS['AbstractPdoDbDriver_lastResult_prop']->setAccessible(true);
+        function control_db($code)
+        {
+            global $db;
+            $linkvars = array(
+                'read_link' => $db->read_link,
+                'write_link' => $db->write_link,
+                'current_link' => $db->current_link,
+            );
+            unset($db->read_link, $db->write_link, $db->current_link);
+            $lastResult = $GLOBALS['AbstractPdoDbDriver_lastResult_prop']->getValue($db);
+            $GLOBALS['AbstractPdoDbDriver_lastResult_prop']->setValue($db, null); // don't let this block serialization
+            control_object($db, $code);
+            foreach ($linkvars as $k => $v) {
+                $db->$k = $v;
+            }
+            $GLOBALS['AbstractPdoDbDriver_lastResult_prop']->setValue($db, $lastResult);
+        }
+    } elseif ($GLOBALS['db'] instanceof DB_SQLite) {
+        function control_db($code)
+        {
+            global $db;
+            $oldLink = $db->db;
+            unset($db->db);
+            control_object($db, $code);
+            $db->db = $oldLink;
+        }
+    } else {
+        function control_db($code)
+        {
+            control_object($GLOBALS['db'], $code);
+        }
     }
 }
