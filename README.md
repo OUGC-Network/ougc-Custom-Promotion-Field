@@ -233,10 +233,10 @@ The following script should validate the following:
       "tableName": "reputation",
       "columnName": "type",
       "columnValue": "post",
-      "columnOperator": "="
+      "columnOperator": "=",
+        "relationMainField": "u.adduid"
+        "relationSecondaryField": "adduid"
     },
-    "relationMainField": "u.adduid"
-    "relationSecondaryField": "adduid"
   ],
   "logicalOperator": "AND"
 }
@@ -259,10 +259,10 @@ The following script should validate the following:
       "tableName": "privatemessages",
       "columnName": "type",
       "columnValue": "post",
-      "columnOperator": "="
-    },
+      "columnOperator": "=",
     "relationMainField": "u.uid"
     "relationSecondaryField": "adduid"
+    },
   ],
   "logicalOperator": "AND"
 }
@@ -308,6 +308,7 @@ The following script should validate the following:
       "evaluationValue": 10,
       "evaluationOperator": ">=",
       "aggregateFunction": "GROUP_CONCAT",
+      "aggregateAlias": "totalWords"
       "aggregateFunctionOptions": {
         "DISTINCT": true
       },
