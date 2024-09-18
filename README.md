@@ -37,11 +37,10 @@
 
 ## 🚀 About <a name = "about"></a>
 
-Custom Promotion Field is the plugin that takes MyBB Group Promotions to the next level! This powerful tool empowers
-administrators by allowing them to select custom tables and columns for seamless validation during group promotions. For
-a quick setup, a simple form simplifies the creation of a custom field, while an advanced form with JSON scripting
-caters to more complex verification needs. Tailor validations to specific criteria, ensuring precision in user group
-promotions, making MyBB's core group promotions more flexible to your forum's unique needs.
+With the Custom Promotion Field plugin, administrators can now select custom tables and columns for seamless validation
+during group promotions. For a quick setup, a simple form simplifies the creation of a custom field, while an advanced
+form with JSON scripting caters to more complex verification needs. Tailor validations to specific criteria, ensuring
+precision in user group promotions, making MyBB's core group promotions more flexible to your forum's unique needs.
 
 [Go up to Table of Contents](#table_of_contents)
 
@@ -190,6 +189,197 @@ The following script should validate the following:
     }
   ],
   "logicalOperator": "AND"
+}
+```
+
+##### User Reported 10 Posts
+
+```JSON
+{
+  "whereClauses": [
+    {
+      "tableName": "reportedcontent",
+      "columnName": "rid",
+      "columnValue": 10,
+      "columnOperator": ">=",
+      "aggregateFunction": "COUNT",
+      "aggregateAlias": "totalPostReports"
+    },
+    {
+      "tableName": "reportedcontent",
+      "columnName": "type",
+      "columnValue": "post",
+      "columnOperator": "="
+    },
+  ],
+  "logicalOperator": "AND"
+}
+```
+
+##### User Gave 10 Reputation Points
+
+```JSON
+{
+  "whereClauses": [
+    {
+      "tableName": "reputation",
+      "columnName": "reputation",
+      "columnValue": 10,
+      "columnOperator": ">=",
+      "aggregateFunction": "SUM",
+      "aggregateAlias": "totalReputationPoints"
+    },
+    {
+      "tableName": "reputation",
+      "columnName": "type",
+      "columnValue": "post",
+      "columnOperator": "=",
+        "relationMainField": "u.adduid"
+        "relationSecondaryField": "adduid"
+    },
+  ],
+  "logicalOperator": "AND"
+}
+```
+
+##### User Sent 10 Private Messages
+
+```JSON
+{
+  "whereClauses": [
+    {
+      "tableName": "privatemessages",
+      "columnName": "pmid",
+      "columnValue": 10,
+      "columnOperator": ">=",
+      "aggregateFunction": "COUNT",
+      "aggregateAlias": "totalPrivateMessages"
+    },
+    {
+      "tableName": "privatemessages",
+      "columnName": "type",
+      "columnValue": "post",
+      "columnOperator": "=",
+    "relationMainField": "u.uid"
+    "relationSecondaryField": "adduid"
+    },
+  ],
+  "logicalOperator": "AND"
+}
+```
+
+##### User Posted 10 Words
+
+The following script should validate the following:
+
+- Get only visible threads.
+- Get only visible posts.
+- Count only posts from forums which forum identifier (fid) is `3` OR `4`.
+- Users have posted 10 or more words in total.
+
+```JSON
+{
+  "whereClauses": [
+    {
+      "tableName": "threads",
+      "columnName": "visible",
+      "columnValue": 1,
+      "columnOperator": "="
+    },
+    {
+      "tableName": "posts",
+      "columnName": "visible",
+      "columnValue": 1,
+      "columnOperator": "="
+    },
+    {
+      "tableName": "posts",
+      "columnName": "fid",
+      "columnValue": [
+        3,
+        4
+      ],
+      "columnOperator": "IN"
+    },
+    {
+      "finalizingClause": true,
+      "tableName": "posts",
+      "columnName": "message",
+      "evaluationValue": 10,
+      "evaluationOperator": ">=",
+      "aggregateFunction": "GROUP_CONCAT",
+      "aggregateAlias": "totalWords"
+      "aggregateFunctionOptions": {
+        "DISTINCT": true
+      },
+      "stripTags": {
+        "allow_smilies": true
+      },
+      "evaluationFunction": "str_word_count",
+      "evaluationFunctionArguments": {
+        "string": "message",
+        "format": 0,
+        "characters": null
+      },
+      "evaluationResultFunction": "version_compare"
+    }
+  ],
+  "logicalOperator": "AND"
+}
+```
+
+##### User Posted Specific Words
+
+The following script should validate the following:
+
+- Users have posted the word `this` 5 or more times in total, OR
+- Users have posted the word `erat` 20 or more times in total.
+
+```JSON
+{
+  "whereClauses": [
+    {
+      "finalizingClause": true,
+      "tableName": "posts",
+      "columnName": "message",
+      "evaluationValue": 5,
+      "evaluationOperator": ">=",
+      "aggregateFunction": "GROUP_CONCAT",
+      "aggregateFunctionOptions": {
+        "DISTINCT": true
+      },
+      "stripTags": true,
+      "evaluationFunction": "substr_count",
+      "evaluationFunctionArguments": {
+        "haystack": "message",
+        "needle": "this",
+        "offset": 0,
+        "length": null
+      },
+      "evaluationResultFunction": "version_compare"
+    },
+    {
+      "finalizingClause": true,
+      "tableName": "posts",
+      "columnName": "message",
+      "evaluationValue": 20,
+      "evaluationOperator": ">=",
+      "aggregateFunction": "GROUP_CONCAT",
+      "aggregateFunctionOptions": {
+        "DISTINCT": true
+      },
+      "stripTags": true,
+      "evaluationFunction": "substr_count",
+      "evaluationFunctionArguments": {
+        "haystack": "message",
+        "needle": "erat",
+        "offset": 0,
+        "length": null
+      },
+      "evaluationResultFunction": "version_compare"
+    }
+  ],
+  "logicalOperator": "OR"
 }
 ```
 

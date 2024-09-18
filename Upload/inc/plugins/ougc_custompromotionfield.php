@@ -26,6 +26,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  ****************************************************************************/
 
+declare(strict_types=1);
+
 // Die if IN_MYBB is not defined, for security reasons.
 defined('IN_MYBB') or die('This file cannot be accessed directly.');
 
@@ -57,6 +59,8 @@ if (defined('IN_ADMINCP')) {
 
 $plugins->add_hook('task_promotions', ['OUGC_CustomPromotionField', 'task_promotions']);
 
+$plugins->add_hook('task_promotions', ['OUGC_CustomPromotionField', 'task_promotions_finalize'], 90);
+
 defined('PLUGINLIBRARY') || define('PLUGINLIBRARY', MYBB_ROOT . 'inc/plugins/pluginlibrary.php');
 
 function ougc_custompromotionfield_info()
@@ -70,8 +74,8 @@ function ougc_custompromotionfield_info()
         'website' => 'https://ougc.network',
         'author' => 'Omar G.',
         'authorsite' => 'https://ougc.network',
-        'version' => '1.8.23',
-        'versioncode' => 1823,
+        'version' => '1.8.37',
+        'versioncode' => 1837,
         'compatibility' => '18*',
         'codename' => 'ougc_custompromotionfield',
         'pl' => [
@@ -195,10 +199,14 @@ class OUGC_CustomPromotionField
 
     // TODO: as listed @ https://mariadb.com/kb/en/aggregate-functions/
     private static $aggregateFunctions = [
-        'COUNT',
-        'MAX',
-        'MIN',
-        'SUM',
+        'COUNT' => [],
+        'MAX' => [],
+        'MIN' => [],
+        'SUM' => [],
+        'GROUP_CONCAT' => [
+            'DISTINCT' => '',
+            'SEPARATOR' => '\n',
+        ],
     ];
 
     // TODO: as listed @ https://mariadb.com/kb/en/logical-operators/
@@ -208,7 +216,16 @@ class OUGC_CustomPromotionField
         'XOR',
     ];
 
-    public static function _db_columns()
+    private static $allowedEvaluationFunctions = [
+        'str_word_count',
+        'substr_count',
+    ];
+
+    private static $allowedEvaluationResultFunctions = [
+        'version_compare',
+    ];
+
+    public static function _db_columns(): array
     {
         return [
             'promotions' => [
@@ -221,7 +238,7 @@ class OUGC_CustomPromotionField
         ];
     }
 
-    public static function _db_verify_columns()
+    public static function _db_verify_columns(): bool
     {
         global $db;
 
@@ -234,16 +251,20 @@ class OUGC_CustomPromotionField
                 }
             }
         }
+
+        return true;
     }
 
-    public static function lang_load()
+    public static function lang_load(): bool
     {
         global $lang;
 
         isset($lang->ougc_custompromotionfield) || $lang->load('users_ougc_custompromotionfield');
+
+        return true;
     }
 
-    public static function meets_requirements()
+    public static function meets_requirements(): bool
     {
         global $PL, $lang;
 
@@ -268,7 +289,7 @@ class OUGC_CustomPromotionField
         return true;
     }
 
-    public static function admin_formcontainer_output_row(&$args)
+    public static function admin_formcontainer_output_row(array &$args): array
     {
         global $lang, $form_container, $form, $mybb, $promotion;
 
@@ -368,9 +389,11 @@ class OUGC_CustomPromotionField
                 'ougc_custompromotionfield_script'
             );
         }
+
+        return $args;
     }
 
-    static function admin_user_group_promotions_add()
+    public static function admin_user_group_promotions_add(): bool
     {
         global $db, $pid, $mybb, $plugins;
 
@@ -387,9 +410,11 @@ class OUGC_CustomPromotionField
 
             $errors[] = $lang->ougc_custompromotionfield_error_script;
         }
+
+        return true;
     }
 
-    public static function admin_user_group_promotions_add_commit()
+    public static function admin_user_group_promotions_add_commit(): bool
     {
         global $db, $pid, $mybb, $plugins;
 
@@ -412,14 +437,16 @@ class OUGC_CustomPromotionField
         if (!$editAction) {
             $db->update_query('promotions', $fields, "pid='{$pid}'");
         }
+
+        return true;
     }
 
-    public static function task_promotions(&$promotionArguments)
+    public static function task_promotions(array &$promotionArguments): array
     {
         global $promotion, $db;
 
         if (my_strpos($promotionArguments['promotion']['requirements'], 'custompromotionfield') === false) {
-            return false;
+            return $promotionArguments;
         }
 
         foreach (
@@ -500,24 +527,37 @@ class OUGC_CustomPromotionField
             &$additionalTables,
             &$additionalClauses,
             &$additionalFields,
-            &$aggregateHavings
+            &$aggregateHavings,
+            $promotionScripts
         ): bool {
             $tableName = &$whereClause['tableName'];
 
             $columnName = &$whereClause['columnName'];
 
-            $columnValues = &$whereClause['columnValue'];
+            if (!empty($whereClause['finalizingClause'])) {
+                $columnValues = &$whereClause['evaluationValue'];
+            } else {
+                $columnValues = &$whereClause['columnValue'];
+            }
 
-            $columnOperator = $whereClause['columnOperator'];
+            if (!empty($whereClause['finalizingClause'])) {
+                $columnOperator = &$whereClause['evaluationOperator'];
+            } else {
+                $columnOperator = &$whereClause['columnOperator'];
+            }
 
-            $columnOperator = $whereClause['columnOperator'];
-
-            $aggregateFunction = isset($whereClause['aggregateFunction']) ? $whereClause['aggregateFunction'] : null;
+            if (!empty($whereClause['aggregateFunction'])) {
+                $aggregateFunction = &$whereClause['aggregateFunction'];
+            } else {
+                $aggregateFunction = null;
+            }
 
             $aggregateAlias = '';
 
             if (isset($whereClause['aggregateAlias']) && ctype_alnum($whereClause['aggregateAlias'])) {
                 $aggregateAlias = $whereClause['aggregateAlias'];
+            } elseif (!empty($whereClause['finalizingClause'])) {
+                $aggregateAlias = $columnName;
             }
 
             if (!is_array($columnValues)) {
@@ -539,10 +579,25 @@ class OUGC_CustomPromotionField
                     )) ||
                 //empty($columnValues) ||
                 !in_array($columnOperator, $comparisonOperators) ||
-                (!empty($aggregateFunction) && !in_array($aggregateFunction, self::$aggregateFunctions)) ||
-                (!empty($aggregateFunction) && empty($aggregateAlias))
+                (!empty($aggregateFunction) && !in_array(
+                        $aggregateFunction,
+                        array_keys(self::$aggregateFunctions)
+                    )) ||
+                (!empty($aggregateFunction) && empty($aggregateAlias) && empty($whereClause['finalizingClause']))
             ) {
                 return false;
+            }
+
+            if (!empty($whereClause['finalizingClause'])) {
+                global $ougcCustomPromotionField;
+
+                is_array($ougcCustomPromotionField) || $ougcCustomPromotionField = [];
+
+                isset($ougcCustomPromotionField['logicalOperator']) || $ougcCustomPromotionField['logicalOperator'] = $promotionScripts['logicalOperator'];
+
+                isset($ougcCustomPromotionField['finalizingClauses']) || $ougcCustomPromotionField['finalizingClauses'] = [];
+
+                $ougcCustomPromotionField['finalizingClauses'][] = $whereClause;
             }
 
             $aggregateAlias = "ougcCustomPromotionFieldColumn_{$aggregateAlias}";
@@ -581,7 +636,10 @@ class OUGC_CustomPromotionField
                 $relationMainField = 'u.uid';
             }
 
-            if (isset($whereClause['relationMainField']) && preg_match('/[\w.]+/', $whereClause['relationMainField'])) {
+            if (isset($whereClause['relationSecondaryField']) && preg_match(
+                    '/[\w.]+/',
+                    $whereClause['relationSecondaryField']
+                )) {
                 $relationSecondaryField = $whereClause['relationSecondaryField'];
             } else {
                 $relationSecondaryField = 'uid';
@@ -589,10 +647,44 @@ class OUGC_CustomPromotionField
 
             $additionalTables["{$tableName} AS {$conditionalTablePrefix} ON ({$conditionalTablePrefix}.{$relationSecondaryField}={$relationMainField})"] = 1;
 
-            if (!empty($aggregateFunction) && in_array($aggregateFunction, self::$aggregateFunctions)) {
-                $hasAggregateFunction = true;
+            if (!empty($aggregateFunction) && in_array($aggregateFunction, array_keys(self::$aggregateFunctions))) {
+                if (empty($whereClause['finalizingClause'])) {
+                    $hasAggregateFunction = true;
+                }
 
-                $additionalFields["{$aggregateFunction}({$conditionalTablePrefix}.{$columnName}) AS {$aggregateAlias}"] = 1;
+                $aggregateFunctionOptions = [];
+
+                /*foreach (self::$aggregateFunctions[$aggregateFunction] as $aggregateFunctionOptionKey => $aggregateFunctionOptionValue) {
+                    $aggregateFunctionOptions[] = "{$aggregateFunctionOptionKey} '{$aggregateFunctionOptionValue}'";
+                }
+
+                foreach (self::$aggregateFunctions[$aggregateFunction] as $aggregateFunctionOptionKey => $aggregateFunctionOptionValue) {
+                    if (empty($aggregateFunctionOptionValue)) {
+                        continue;
+                    }
+
+                    $aggregateFunctionOptions[] = "{$aggregateFunctionOptionKey} '{$aggregateFunctionOptionValue}'";
+                }*/
+
+                if (!empty($whereClause['aggregateFunctionOptions'])) {
+                    foreach ($whereClause['aggregateFunctionOptions'] as $aggregateFunctionOptionKey => $aggregateFunctionOptionValue) {
+                        if (isset(self::$aggregateFunctions[$aggregateFunction][$aggregateFunctionOptionKey])) {
+                            if ($aggregateFunctionOptionKey !== 'DISTINCT') {
+                                $aggregateFunctionOptions[] = "{$aggregateFunctionOptionKey} {$aggregateFunctionOptionValue}";
+                            }
+                        }
+                    }
+                }
+
+                $aggregateFunctionOptions = implode(' ', $aggregateFunctionOptions);
+
+                $distinctOption = '';
+
+                if (isset($whereClause['aggregateFunctionOptions']['DISTINCT'])) {
+                    $distinctOption = 'DISTINCT';
+                }
+
+                $additionalFields["{$aggregateFunction}({$distinctOption} {$conditionalTablePrefix}.{$columnName} {$aggregateFunctionOptions}) AS {$aggregateAlias}"] = 1;
             }
 
             if (empty($aggregateFunction)) {
@@ -601,14 +693,13 @@ class OUGC_CustomPromotionField
                 $dataColum = $aggregateAlias;
             }
 
-
-            if (empty($hasAggregateFunction)) {
-                $additionalClauses["{$dataColum} {$columnOperator} {$conditionalValue}"] = 1;
-            } else {
+            if (!empty($hasAggregateFunction)) {
                 $aggregateHavings["{$dataColum} {$columnOperator} {$conditionalValue}"] = 1;
+            } elseif (empty($whereClause['finalizingClause'])) {
+                $additionalClauses["{$dataColum} {$columnOperator} {$conditionalValue}"] = 1;
             }
 
-            return '';
+            return false;
         };
 
         foreach ($promotionScripts['whereClauses'] as $whereClause) {
@@ -625,9 +716,11 @@ class OUGC_CustomPromotionField
 
         $additionalTables = $additionalTables ? " LEFT JOIN {$db->table_prefix}{$additionalTables}" : '';
 
-        $additionalClauses = implode(" {$logicalOperator} ", array_keys($additionalClauses));
+        if (!empty($additionalClauses)) {
+            $additionalClauses = implode(" {$logicalOperator} ", array_keys($additionalClauses));
 
-        $promotionArguments['sql_where'] .= " {$promotionArguments['and']} ({$additionalClauses})";
+            $promotionArguments['sql_where'] .= " {$promotionArguments['and']} ({$additionalClauses})";
+        }
 
         $additionalFields = implode(', ', array_keys($additionalFields));
 
@@ -654,9 +747,9 @@ class OUGC_CustomPromotionField
         my_strpos($fields, "uid,' . $promotionArguments['usergroup_select'] . '") !== false
     )
     {
-        $GLOBALS["someDoneVariable"] = true;
+        //$GLOBALS["someDoneVariable"] = true;
         
-        $controlDone = false;
+        //$controlDone = false;
     
         $table = "users AS u ' . $additionalTables . '";
     
@@ -669,7 +762,159 @@ class OUGC_CustomPromotionField
 }'
         );
 
-        return true;
+        return $promotionArguments;
+    }
+
+    public static function task_promotions_finalize(array &$promotionArguments): array
+    {
+        global $db;
+        global $ougcCustomPromotionField;
+
+        if (empty($ougcCustomPromotionField['finalizingClauses'])) {
+            return $promotionArguments;
+        }
+
+        $dbQuery = $db->simple_select(
+            'users',
+            "uid,{$promotionArguments['usergroup_select']}",
+            $promotionArguments['sql_where'],
+            ['group_by' => 'uid']
+        );
+
+        $userIDs = [];
+
+        while ($userData = $db->fetch_array($dbQuery)) {
+            $evaluationResultMain = true;
+
+            foreach ($ougcCustomPromotionField['finalizingClauses'] as $whereClause) {
+                $columnName = &$whereClause['columnName'];
+
+                $aggregateAlias = $columnName;
+
+                $aggregateAlias = "ougcCustomPromotionFieldColumn_{$aggregateAlias}";
+
+                if (
+                    !isset($whereClause['evaluationFunction']) ||
+                    !isset($whereClause['evaluationFunctionArguments']) ||
+                    !($whereClause['evaluationFunctionArguments']) ||
+                    !function_exists($whereClause['evaluationFunction']) ||
+                    !function_exists($whereClause['evaluationResultFunction']) ||
+                    !in_array($whereClause['evaluationFunction'], self::$allowedEvaluationFunctions) ||
+                    !in_array($whereClause['evaluationResultFunction'], self::$allowedEvaluationResultFunctions) ||
+                    !isset($userData[$aggregateAlias])
+                ) {
+                    continue;
+                }
+
+                if (isset($whereClause['stripTags'])) {
+                    $userData[$aggregateAlias] = self::stripTags(
+                        $userData[$aggregateAlias],
+                        (array)$whereClause['stripTags']
+                    );
+                }
+
+                $userData[$aggregateAlias] = my_strtolower($userData[$aggregateAlias]);
+
+                if (($mainArgumentKey = array_search(
+                        $whereClause['columnName'],
+                        $whereClause['evaluationFunctionArguments'],
+                        true
+                    )) !== false) {
+                    $whereClause['evaluationFunctionArguments'][$mainArgumentKey] = $userData[$aggregateAlias];
+                }
+
+                $evaluationValue = $whereClause['evaluationFunction'](...$whereClause['evaluationFunctionArguments']);
+
+                $evaluationResult = true;
+
+                foreach ($whereClause['evaluationValue'] as $expectedEvaluationValueKey => $expectedEvaluationValueValue) {
+                    $evaluationResult = $evaluationResult && $whereClause['evaluationResultFunction'](
+                            (string)$evaluationValue,
+                            (string)$expectedEvaluationValueValue,
+                            $whereClause['evaluationOperator']
+                        );
+                }
+
+                switch ($ougcCustomPromotionField['logicalOperator']) {
+                    case 'AND':
+                        $evaluationResultMain = $evaluationResultMain && $evaluationResult;
+                        break;
+                    case 'OR':
+                        $evaluationResultMain = $evaluationResultMain || $evaluationResult;
+                        break;
+                    //case 'XOR':
+                    //$evaluationResultMain = $evaluationResultMain xor $evaluationResult;
+                    //break;
+                }
+            }
+
+            if ($evaluationResultMain) {
+                $userIDs[(int)$userData['uid']] = 1;
+            }
+        }
+
+        $userIDs = implode("','", array_keys($userIDs));
+
+        $promotionArguments['sql_where'] .= " {$promotionArguments['and']} u.uid IN ('{$userIDs}')";
+
+        return $promotionArguments;
+    }
+
+    /**
+     * Strips tags and special code off a string
+     * Based off Zinga Burga's "Thread Tooltip Preview" plugin threadtooltip_getpreview() function.
+     *
+     * @param string $message Message to strip tags off from.
+     * @return string Parsed message
+     */
+    private static function stripTags(
+        string $message,
+        array $parserOptions = []
+    ): string {
+        // Attempt to remove any quotes
+        $message = preg_replace_callback(array(
+            '#\[quote=([\"\']|&quot;|)(.*?)(?:\\1)(.*?)(?:[\"\']|&quot;)?\](.*?)\[/quote\](\r\n?|\n?)#si',
+            '#\[quote\](.*?)\[\/quote\](\r\n?|\n?)#si',
+            '#\[quote\]#si',
+            '#\[\/quote\]#si'
+        ), function ($matches) {
+            return '';
+        }, $message);
+
+        global $parser;
+
+        if (!is_object($parser)) {
+            require_once MYBB_ROOT . 'inc/class_parser.php';
+
+            $parser = new postParser();
+        }
+
+        $message = $parser->parse_message($message, array_merge([
+            'allow_html' => 0,
+            'allow_mycode' => 1,
+            'allow_smilies' => 0,
+            'allow_imgcode' => 1,
+            'filter_badwords' => 1,
+            'nl2br' => 0
+        ], $parserOptions));
+
+        // before stripping tags, try converting some into spaces
+        $message = preg_replace([
+            '~\<(?:img|hr).*?/\>~si',
+            '~\<li\>(.*?)\</li\>~si'
+        ], [' ', "\n* $1"], $message);
+
+        $message = unhtmlentities(strip_tags($message));
+
+        // convert \xA0 to spaces (reverse &nbsp;)
+        $message = trim(
+            preg_replace(array('~ {2,}~', "~\n{2,}~"),
+                array(' ', "\n"),
+                strtr($message, array("\xA0" => ' ', "\r" => '', "\t" => ' ')))
+        );
+
+        // newline fix for browsers which don't support them
+        return preg_replace("~ ?\n ?~", " \n", $message);
     }
 }
 
