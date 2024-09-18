@@ -74,8 +74,8 @@ function ougc_custompromotionfield_info()
         'website' => 'https://ougc.network',
         'author' => 'Omar G.',
         'authorsite' => 'https://ougc.network',
-        'version' => '1.8.23',
-        'versioncode' => 1823,
+        'version' => '1.8.37',
+        'versioncode' => 1837,
         'compatibility' => '18*',
         'codename' => 'ougc_custompromotionfield',
         'pl' => [
