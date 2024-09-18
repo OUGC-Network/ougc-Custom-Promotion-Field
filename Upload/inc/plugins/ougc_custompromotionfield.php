@@ -393,7 +393,7 @@ class OUGC_CustomPromotionField
         return $args;
     }
 
-    static function admin_user_group_promotions_add(): bool
+    public static function admin_user_group_promotions_add(): bool
     {
         global $db, $pid, $mybb, $plugins;
 
